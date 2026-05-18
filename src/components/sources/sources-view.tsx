@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { open } from "@tauri-apps/plugin-dialog"
 import { Plus, FileText, RefreshCw, BookOpen, Trash2, Folder, ChevronRight, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useWikiStore } from "@/stores/wiki-store"
 import { listDirectory, readFile } from "@/commands/fs"
@@ -291,7 +290,15 @@ export function SourcesView() {
         </div>
       </div>
 
-      <ScrollArea className="flex-1">
+      {/*
+        Plain overflow-y-auto instead of the ScrollArea primitive: in macOS
+        WKWebView (Tauri) the base-ui ScrollArea wasn't always capturing
+        trackpad wheel events here, and unhandled wheels bubbled up to the
+        window which macOS then interpreted as a window-drag gesture. Native
+        overflow scrolling sidesteps the custom-scroll wrapper and behaves
+        the way users expect.
+      */}
+      <div className="flex-1 overflow-y-auto">
         {refreshError && (
           <div className="mx-4 mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {t("sources.refreshFailed", {
@@ -329,7 +336,7 @@ export function SourcesView() {
             />
           </div>
         )}
-      </ScrollArea>
+      </div>
 
       <div className="flex items-center justify-between gap-2 border-t px-4 py-2 text-xs text-muted-foreground">
         <span>{t("sources.sourceCount", { count: countFiles(sources) })}</span>

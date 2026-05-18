@@ -144,6 +144,18 @@ export async function streamClaudeCodeCli(
   let unlistenDone: UnlistenFn | undefined
   let finished = false
 
+  // Deferred that resolves when the child process actually finishes —
+  // via the `:done` event, a setup error, or user abort. Without this,
+  // the async function would resolve as soon as `invoke("claude_cli_spawn")`
+  // returns (which is only when the subprocess is SPAWNED, not when it
+  // exits). The caller would then continue with an empty buffer because
+  // none of the stdout events have been processed yet — that's the
+  // "(Analysis not available)" stub bug.
+  let resolveCompletion!: () => void
+  const completion = new Promise<void>((resolve) => {
+    resolveCompletion = resolve
+  })
+
   // Diagnostic capture for failure paths. The Rust side emits every
   // stdout line; lines the parser doesn't recognize (non-JSON,
   // unknown event types, the stream-json `{"type":"error",...}`
@@ -173,6 +185,7 @@ export async function streamClaudeCodeCli(
     finished = true
     cleanup()
     cb()
+    resolveCompletion()
   }
 
   const abortListener = () => {
@@ -222,6 +235,14 @@ export async function streamClaudeCodeCli(
       messages,
     }
     await invoke("claude_cli_spawn", payload)
+
+    // CRITICAL: invoke() resolves when the subprocess is SPAWNED, not
+    // when it exits. We have to wait for the `:done` event (or an abort
+    // or setup error) to fire `finishWith`, which resolves this. If we
+    // returned here directly, the caller's onToken handler would still
+    // run in the background — but the caller would already be past the
+    // line that reads the accumulated text, so it'd see an empty buffer.
+    await completion
   } catch (err) {
     finishWith(() => {
       const message = err instanceof Error ? err.message : String(err)
